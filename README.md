@@ -35,145 +35,145 @@ git clone <repository-url> cd force_sensor
 ```bat
 pip install -r requirements.txt
 ```
-3. Ensure your microcontroller is connected to a serial port and sending data in the expected manner. After you install the [HX711 library](https://github.com/bogde/HX711) and [Bounce2](https://github.com/thomasfredericks/Bounce2) libraries, you can flash this code onto your microcontroller (assuming you have the correct hardware and connections, basically you need to connect DT and SCK pairs for each load cell module independently to whichever pins are supported on your microcontroller). 
+3. Ensure your microcontroller is connected to a serial port and sending data in the expected manner. After you install the [HX711 library](https://github.com/bogde/HX711) library, you can flash this code onto your microcontroller (assuming you have the correct hardware and connections, basically you need to connect DT and SCK pairs for each load cell module independently to whichever pins are supported on your microcontroller). 
 
 ---
 #### Microcontroller Code ####
 **Note:** if you flash this using the Arduino IDE, make sure you close the IDE before you attempt to connect to microcontroller via the Python interface in this repository.  
 ```
-#include "HX711.h" // Install HX711 library from Bogdan Necula
-#include <Bounce2.h> // Include Bounce2 library
-#define USE_BUTTON // Comment this to exclude the button
+    #include "HX711.h"   // Include Bogdan Necula HX711 library
+    #include <Bounce2.h> // Include Bounce2 library
+    // #define USE_BUTTON // Comment this to exclude the button
 
-// Create HX711 objects for each module
-HX711 scale1;
-HX711 scale2;
+    // Create HX711 objects for each module
+    HX711 scale1;
+    HX711 scale2;
 
-// Pin configurations
-const int HX711_DT1 = 3;
-const int HX711_SCK1 = 2;
-const int HX711_DT2 = 5;
-const int HX711_SCK2 = 4;
+    // Pin configurations
+    const int HX711_DT1 = 3;
+    const int HX711_SCK1 = 2;
+    const int HX711_DT2 = 5;
+    const int HX711_SCK2 = 4;
 
-// Calibration parameters (update these after calibration)
-float calibrationFactor1 = -5838.f; // Replace with your scale factor for module 1
-float calibrationFactor2 = -68086.f; // Replace with your scale factor for module 2
-long offset1 = 0;
-long offset2 = 0;
-float weight1 = 0.f;
-float weight2 = 0.f;
+    // Calibration parameters (update these after calibration)
+    float calibrationFactor1 = -5838.f; // Replace with your scale factor for module 1
+    float calibrationFactor2 = -68086.f; // Replace with your scale factor for module 2
+    long offset1 = 0;
+    long offset2 = 0;
+    float weight1 = 0.f;
+    float weight2 = 0.f;
 
-struct WeightData {
-    uint8_t w1; // Packed weight1
-    uint8_t w2; // Packed weight2
-};
+    struct WeightData {
+        uint8_t w1; // Packed weight1
+        uint8_t w2; // Packed weight2
+    };
 
-// Button setup
-#ifdef USE_BUTTON
-  const int BTN = 6;
-  Bounce button = Bounce(); // Create a Bounce object
-  // Variables for button press recognition
-  unsigned long lastPressTime = 0;
-  bool singlePressDetected = false;
-  const unsigned long doublePressInterval = 500; // Time in ms to detect double-press
-#endif
-
-
-void setup() {
+    // Button setup
     #ifdef USE_BUTTON
-      pinMode(BTN, INPUT_PULLUP);
-      button.attach(BTN);           // Attach the button to Bounce
-      button.interval(10);          // Debounce interval (in milliseconds)
+    const int BTN = 6;
+    Bounce button = Bounce(); // Create a Bounce object
+    // Variables for button press recognition
+    unsigned long lastPressTime = 0;
+    bool singlePressDetected = false;
+    const unsigned long doublePressInterval = 500; // Time in ms to detect double-press
     #endif
-    Serial.begin(115200);
-    // Initialize HX711 modules
-    scale1.begin(HX711_DT1, HX711_SCK1);
-    scale2.begin(HX711_DT2, HX711_SCK2);
 
-    // Optionally set gain (default is 128)
-    scale1.set_gain(64);
-    scale1.set_scale(1.f);
-    
-    scale2.set_gain(64);
-    scale2.set_scale(1.f);
 
-    if (scale1.is_ready()) {
-      scale1.tare(10);
-      offset1 = scale1.read_average(20);
-    }
-    if (scale2.is_ready()) {
-      scale2.tare(10);
-      offset2 = scale2.read_average(10);
-    }
-    Serial.println("Weight1, Weight2");
-}
+    void setup() {
+        #ifdef USE_BUTTON
+        pinMode(BTN, INPUT_PULLUP);
+        button.attach(BTN);           // Attach the button to Bounce
+        button.interval(10);          // Debounce interval (in milliseconds)
+        #endif
+        Serial.begin(115200);
+        // Initialize HX711 modules
+        scale1.begin(HX711_DT1, HX711_SCK1);
+        scale2.begin(HX711_DT2, HX711_SCK2);
 
-void loop() {
-    #ifdef USE_BUTTON
-      // Update the button state
-      button.update();
-      if (button.fell()) {
-          unsigned long currentTime = millis();
+        // Optionally set gain (default is 128)
+        scale1.set_gain(64);
+        scale1.set_scale(1.f);
+        
+        scale2.set_gain(64);
+        scale2.set_scale(1.f);
 
-          if (currentTime - lastPressTime <= doublePressInterval) {
-              // Double-press detected
-              calibrationFactor1 = (float)(scale1.read_average(20) - offset1);
-              calibrationFactor2 = (float)(scale2.read_average(20) - offset2);
-              // Serial.println("Double-press detected: Updated calibration factors.");
-              // Serial.print("CalibrationFactor1: ");
-              // Serial.println(calibrationFactor1);
-              // Serial.print("CalibrationFactor2: ");
-              // Serial.println(calibrationFactor2);
-              // delay(500);
-          } else {
-              // Single-press detected
-              singlePressDetected = true;
-          }
-
-          lastPressTime = currentTime;
-      }
-
-      // Handle single press
-      if (singlePressDetected && millis() - lastPressTime > doublePressInterval) {
-          // Reset singlePressDetected to avoid repeated actions
-          singlePressDetected = false;
-
-          // Update offsets
-          offset1 = scale1.read_average(20);
-          offset2 = scale2.read_average(20);
-          // Serial.println("Single-press detected: Updated offsets.");
-          // Serial.print("Offset1: ");
-          // Serial.println(offset1);
-          // Serial.print("Offset2: ");
-          // Serial.println(offset2);
-          // delay(500);
-      }
-    #endif
-    // Check if both scales are ready
-    if (scale1.is_ready() && scale2.is_ready()) {
-        // Read raw values
-        long raw1 = scale1.read();
-        delayMicroseconds(5);
-        long raw2 = scale2.read();
-
-        // Convert raw values to weights
-        weight1 = 0.25 *min(max((raw1 - offset1) / calibrationFactor1, 0.f),1.f) + 0.75 * weight1;
-        weight2 = 0.25 *min(max((raw2 - offset2) / calibrationFactor2, 0.f),1.f) + 0.75 * weight2;
-        uint8_t w1 = round(255 * weight1);
-        uint8_t w2 = round(255 * weight2);
-
-        // Pack weights into struct
-        WeightData data;
-        data.w1 = round(255 * weight1);
-        data.w2 = round(255 * weight2);
-
-        // Send struct as binary data
-        Serial.write((uint8_t*)&data, sizeof(data));
+        if (scale1.is_ready()) {
+        scale1.tare(10);
+        offset1 = scale1.read_average(20);
+        }
+        if (scale2.is_ready()) {
+        scale2.tare(10);
+        offset2 = scale2.read_average(10);
+        }
+        Serial.println("Weight1, Weight2");
     }
 
-    // Delay for update rate
-    delay(10);
-}
+    void loop() {
+        #ifdef USE_BUTTON
+        // Update the button state
+        button.update();
+        if (button.fell()) {
+            unsigned long currentTime = millis();
+
+            if (currentTime - lastPressTime <= doublePressInterval) {
+                // Double-press detected
+                calibrationFactor1 = (float)(scale1.read_average(20) - offset1);
+                calibrationFactor2 = (float)(scale2.read_average(20) - offset2);
+                // Serial.println("Double-press detected: Updated calibration factors.");
+                // Serial.print("CalibrationFactor1: ");
+                // Serial.println(calibrationFactor1);
+                // Serial.print("CalibrationFactor2: ");
+                // Serial.println(calibrationFactor2);
+                // delay(500);
+            } else {
+                // Single-press detected
+                singlePressDetected = true;
+            }
+
+            lastPressTime = currentTime;
+        }
+
+        // Handle single press
+        if (singlePressDetected && millis() - lastPressTime > doublePressInterval) {
+            // Reset singlePressDetected to avoid repeated actions
+            singlePressDetected = false;
+
+            // Update offsets
+            offset1 = scale1.read_average(20);
+            offset2 = scale2.read_average(20);
+            // Serial.println("Single-press detected: Updated offsets.");
+            // Serial.print("Offset1: ");
+            // Serial.println(offset1);
+            // Serial.print("Offset2: ");
+            // Serial.println(offset2);
+            // delay(500);
+        }
+        #endif
+        // Check if both scales are ready
+        if (scale1.is_ready() && scale2.is_ready()) {
+            // Read raw values
+            long raw1 = scale1.read();
+            delayMicroseconds(5);
+            long raw2 = scale2.read();
+
+            // Convert raw values to weights
+            weight1 = 0.25 *min(max((raw1 - offset1) / calibrationFactor1, 0.f),1.f) + 0.75 * weight1;
+            weight2 = 0.25 *min(max((raw2 - offset2) / calibrationFactor2, 0.f),1.f) + 0.75 * weight2;
+            uint8_t w1 = round(255 * weight1);
+            uint8_t w2 = round(255 * weight2);
+
+            // Pack weights into struct
+            WeightData data;
+            data.w1 = w1;
+            data.w2 = w2;
+
+            // Send struct as binary data
+            Serial.write((uint8_t*)&data, sizeof(data));
+        }
+
+        // Delay for update rate
+        delay(10);
+    }
 ```
 
 ---

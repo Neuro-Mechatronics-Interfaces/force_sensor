@@ -35,9 +35,9 @@ git clone <repository-url> cd force_sensor
 ```bat
 pip install -r requirements.txt
 ```
-3. Ensure your microcontroller is connected to a serial port and sending data in the expected manner. To do that, flash the following code (and use appropriate pin connections based on pin names or your appropriate modified counterparts):
+3. Ensure your microcontroller is connected to a serial port and sending data in the expected manner. After you install the [HX711 library](https://github.com/bogde/HX711) and [Bounce2](https://github.com/thomasfredericks/Bounce2) libraries, you can flash this code onto your microcontroller (assuming you have the correct hardware and connections, basically you need to connect DT and SCK pairs for each load cell module independently to whichever pins are supported on your microcontroller). 
 ```
-#include "HX711.h"
+#include "HX711.h" // Install HX711 library from Bogdan Necula
 #include <Bounce2.h> // Include Bounce2 library
 #define USE_BUTTON // Comment this to exclude the button
 

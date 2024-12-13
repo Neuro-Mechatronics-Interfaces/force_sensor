@@ -1,7 +1,9 @@
 import pyqtgraph as pg
+from PyQt5.QtCore import QObject, QTimer
 from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
 import numpy as np
 import os
+from collections import deque
 
 class ForceSensorPlotter:
     def __init__(self, num_channels=2, buffer_size=500):
@@ -13,6 +15,7 @@ class ForceSensorPlotter:
         """
         self.num_channels = num_channels
         self.buffer_size = buffer_size
+        self.fifo_queue = deque(maxlen=buffer_size)  # FIFO queue for plotting
 
         # Get the absolute path to Dumbell.png
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +34,8 @@ class ForceSensorPlotter:
         # Add a label for the sample rate
         self.sample_rate_label = pg.LabelItem(justify="right", size="14pt")
         self.win.addItem(self.sample_rate_label, row=0, col=0, colspan=2)
+        self.sample_rate_label.setText(f"Sample Rate: 0.0 Hz")
+        self.sample_rate = 0.0
 
         # Initialize data storage and plots
         self.data = [np.zeros(buffer_size) for _ in range(num_channels)]
@@ -48,26 +53,25 @@ class ForceSensorPlotter:
         self.timer.timeout.connect(self.update)
         self.timer.start(50)  # Update rate in ms
 
-    def update(self, data=None, sample_rate=None):
+    def update(self):
         """
         Updates the plots with new batch data.
-
-        :param data: List of floats, where each float corresponds to one channel's value.
-        :param sample_rate: The current sample rate to display.
         """
         # Update the sample rate label
-        if sample_rate is not None:
-            self.sample_rate_label.setText(f"Sample Rate: {sample_rate:.2f} Hz")
+        self.sample_rate_label.setText(f"Sample Rate: {self.sample_rate:.2f} Hz")
 
         # Update the plot data
-        if data:
-            for i, channel_data in enumerate(data):
-                self.data[i] = np.roll(self.data[i], -1)  # Shift data to the left
-                self.data[i][-1] = channel_data  # Add the new value
+        if self.fifo_queue:
+            data = self.fifo_queue.popleft()
+            for i, value in enumerate(data):
+                self.data[i] = np.roll(self.data[i], -1)
+                self.data[i][-1] = value
+            for i, curve in enumerate(self.curves):
+                curve.setData(self.data[i])
 
-        # Update the curves
-        for i, curve in enumerate(self.curves):
-            curve.setData(self.data[i])
+    def add_data(self, data):
+        """Adds new data to the FIFO queue."""
+        self.fifo_queue.append(data)
 
     def run(self):
         """Starts the PyQtGraph event loop."""

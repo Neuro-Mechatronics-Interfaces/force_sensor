@@ -1,8 +1,7 @@
-import sys
-import argparse
+from PyQt5.QtCore import QTimer
 from force_sensor.connection import ForceSensorConnection
 from force_sensor.plotting import ForceSensorPlotter
-from PyQt5.QtCore import QTimer
+import argparse
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Force Sensor Visualization Tool")
@@ -15,35 +14,29 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    print(f"Using the following configuration:")
-    print(f"  Port: {args.port}")
-    print(f"  Baudrate: {args.baudrate}")
-    print(f"  Number of Channels: {args.num_channels}")
-    print(f"  Buffer Size: {args.buffer_size}")
-
-    connection = ForceSensorConnection(
-        port=args.port, baudrate=args.baudrate, num_channels=args.num_channels
-    )
-    try:
-        connection.connect()
-    except Exception as e:
-        print(f"Failed to connect to the microcontroller: {e}")
-        sys.exit(1)
-
+    connection = ForceSensorConnection(port=args.port, baudrate=args.baudrate, num_channels=args.num_channels)
     plotter = ForceSensorPlotter(num_channels=args.num_channels, buffer_size=args.buffer_size)
 
-    def update_plot():
-        batch_data = connection.read_data()  # Read batched data
-        if batch_data:
-            sample_rate = connection.get_sample_rate()  # Get current sample rate
-            plotter.update(batch_data, sample_rate)  # Update plots with batched data
+    def transfer_data():
+        """Transfers data from the connection buffer to the plotter."""
+        while connection.fifo_buffer:
+            data = connection.fifo_buffer.popleft()
+            plotter.add_data(data)
+        plotter.sample_rate = connection.get_sample_rate()
 
-    timer = QTimer()
-    timer.timeout.connect(update_plot)
-    timer.start(50)
+    try:
+        connection.connect()
+        connection.start()
 
-    plotter.run()
-    connection.disconnect()
+        # Timer for transferring data
+        transfer_timer = QTimer()
+        transfer_timer.timeout.connect(transfer_data)
+        transfer_timer.start(50)
+
+        plotter.run()
+    finally:
+        connection.stop()
+        connection.disconnect()
 
 if __name__ == "__main__":
     main()
